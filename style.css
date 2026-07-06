@@ -1,0 +1,130 @@
+#dmt-bubbles-layer {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 1500;
+}
+
+.rpg-thought-bubble {
+    position: absolute;
+    transform: translateX(-100%);
+    pointer-events: auto;
+    cursor: pointer;
+    box-sizing: border-box;
+    /* УБРАЛИ overflow: hidden; — теперь пузырьки не обрезаются! */
+    
+    background: rgba(26, 26, 46, 0.95);
+    border: 2px solid rgba(139, 92, 246, 0.6);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), inset 0 0 15px rgba(139, 92, 246, 0.15);
+    backdrop-filter: blur(8px);
+    
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    transform-origin: top right;
+    animation: float-bubble 4s ease-in-out infinite;
+
+    margin-left: -15px;
+    margin-top: 40px; 
+    width: 300px;
+    max-height: 600px; 
+    border-radius: 24px;
+    padding: 14px 18px;
+}
+
+@keyframes float-bubble {
+    0%, 100% { transform: translateX(-100%) translateY(0); }
+    50% { transform: translateX(-100%) translateY(-6px); }
+}
+
+.rpg-thought-bubble:hover {
+    box-shadow: 0 8px 24px rgba(139, 92, 246, 0.4), inset 0 0 20px rgba(139, 92, 246, 0.3);
+    border-color: rgba(139, 92, 246, 0.9);
+}
+
+.rpg-thought-bubble.rpg-collapsed {
+    margin-left: -30px; 
+    margin-top: 5px; 
+    
+    width: 42px;            
+    max-height: 42px;       
+    border-radius: 50%;     
+    padding: 0;
+}
+
+.rpg-expanded-content {
+    width: 100%;
+    opacity: 1;
+    visibility: visible;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+    transition-delay: 0.15s; 
+}
+
+.rpg-thought-bubble.rpg-collapsed .rpg-expanded-content {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition-delay: 0s; 
+}
+
+.rpg-collapsed-icon {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 20px;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.2s ease, visibility 0.2s ease;
+}
+
+.rpg-thought-bubble.rpg-collapsed .rpg-collapsed-icon {
+    opacity: 1;
+    visibility: visible;
+    transition-delay: 0.2s; 
+}
+
+
+.rpg-thought-bubble::before { 
+    content: ''; position: absolute;
+    top: -15px; right: 25px; 
+    width: 18px; height: 18px;
+    background: rgba(26, 26, 46, 0.95);
+    border: 2px solid rgba(139, 92, 246, 0.6);
+    border-radius: 50%;
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    animation: pulse-thought 2s ease-in-out infinite alternate;
+}
+.rpg-thought-bubble::after { 
+    content: ''; position: absolute;
+    top: -28px; right: 12px; 
+    width: 10px; height: 10px;
+    background: rgba(26, 26, 46, 0.95);
+    border: 2px solid rgba(139, 92, 246, 0.6);
+    border-radius: 50%;
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    animation: pulse-thought 2s ease-in-out infinite alternate;
+    animation-delay: 0.5s; 
+}
+
+.rpg-thought-bubble.rpg-collapsed::before {
+    top: 33px; right: 0px; 
+    width: 12px; height: 12px;
+    border-width: 1.5px;
+}
+.rpg-thought-bubble.rpg-collapsed::after {
+    top: 42px; right: -8px; 
+    width: 7px; height: 7px;
+    border-width: 1.5px;
+}
+
+@keyframes pulse-thought {
+    0% { transform: scale(0.85); opacity: 0.7; }
+    100% { transform: scale(1.15); opacity: 1; }
+}
+
+.rpg-thought-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 0.8rem; color: #e94560; font-weight: 600; text-transform: uppercase; }
+.rpg-thought-text { font-size: 0.95rem; font-style: italic; color: #eaeaea; line-height: 1.5; }
+.dmt-regenerate-btn { background: transparent; border: none; color: #888; cursor: pointer; padding: 2px 5px; transition: color 0.2s; }
+.dmt-regenerate-btn:hover { color: #e94560; }
+.rpg-loading-dots::after { content: '.'; animation: dots 1.5s steps(5, end) infinite; }
+@keyframes dots { 0%, 20% { content: '.'; } 40% { content: '..'; } 60% { content: '...'; } 80%, 100% { content: ''; } }
+
+.rpg-thought-bubble.mobile-fallback { transform: translateX(0); margin-left: 20px; }
+.rpg-thought-bubble.mobile-fallback::before, .rpg-thought-bubble.mobile-fallback::after { display: none; }

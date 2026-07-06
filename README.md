@@ -19,7 +19,7 @@ A SillyTavern extension that gives characters a visible **inner monologue**. A s
 
 ## 📦 Install
 
-Copy the `SillyTavern -Dual-Model Thoughts` folder into:
+Copy the `Dual-Model-Thoughts` folder into:
 
 ```
 SillyTavern/data/<user>/extensions/

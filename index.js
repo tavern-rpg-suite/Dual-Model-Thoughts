@@ -8,6 +8,8 @@ const DMT_PROMPT_KEY = 'dmt_thought_injection';
    LOCALIZATION (RU / EN)
    Every visible string + the default thought prompt (incl. its
    output language) switches with dmtSettings.language.
+   Based on the bubble positioning concept and layout from SpicyMarinara's RPG Companion (Licensed under AGPLv3)
+   Refactored and adapted for standalone Dual-Model implementation.
    ============================================================ */
 const I18N = {
     en: {

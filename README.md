@@ -52,4 +52,4 @@ Supported: a thought is generated for the character whose message was just rende
 - CSS is namespaced; only a fixed overlay layer (`#dmt-bubbles-layer`) is added to the page.
 
 ---
-Credits. Inspired by the thought-bubble feature in RPG Companion by SpicyMarinara (AGPL-3.0). Portions of the implementation may derive from that project.
+Credits. Inspired by the thought-bubble feature in [RPG Companion](https://github.com/SpicyMarinara/rpg-companion-sillytavern) by SpicyMarinara (AGPL-3.0). Portions of the implementation may derive from that project.

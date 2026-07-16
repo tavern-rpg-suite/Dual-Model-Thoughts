@@ -8,8 +8,6 @@ const DMT_PROMPT_KEY = 'dmt_thought_injection';
    LOCALIZATION (RU / EN)
    Every visible string + the default thought prompt (incl. its
    output language) switches with dmtSettings.language.
-   Based on the bubble positioning concept and layout from SpicyMarinara's RPG Companion (Licensed under AGPLv3)
-   Refactored and adapted for standalone Dual-Model implementation.
    ============================================================ */
 const I18N = {
     en: {
@@ -95,6 +93,12 @@ function t(key, vars) {
 }
 function isDefaultPrompt(p) {
     return p === I18N.en.default_prompt || p === I18N.ru.default_prompt;
+}
+
+// The thought is a FULL model response and the char name comes from a downloaded card —
+// neither may ever hit innerHTML raw (a steered model could emit <img onerror=...>).
+function escapeHtml(x) {
+    return String(x ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 const bubblesMap = new Map();
@@ -228,6 +232,8 @@ function loadSettings() {
         contextMessages: 10, injectContext: false, injectCount: 2
     };
     dmtSettings = Object.assign({}, defaults, extension_settings[MODULE_NAME]);
+    if (!Number.isFinite(dmtSettings.contextMessages)) dmtSettings.contextMessages = defaults.contextMessages;
+    if (!Number.isFinite(dmtSettings.injectCount)) dmtSettings.injectCount = defaults.injectCount;
 
     // Seed the default prompt (in the chosen language) only if none is saved.
     // NOTE: we do NOT auto-overwrite a user's custom prompt — the old
@@ -307,6 +313,8 @@ function saveThoughtToChat(messageId, charName, thought) {
     if (!msg.extra) msg.extra = {};
     if (!msg.extra.dmt_thoughts) msg.extra.dmt_thoughts = {};
     msg.extra.dmt_thoughts[charName] = thought;
+    if (!msg.extra.dmt_swipe) msg.extra.dmt_swipe = {};
+    msg.extra.dmt_swipe[charName] = msg.swipe_id ?? 0;   // remember WHICH swipe this thought belongs to
     saveChatDebounced();
 }
 
@@ -330,7 +338,6 @@ function renderThought(messageId, charName, thought, isLoading = false, isError 
         }
 
         dmtLayer.appendChild(bubble);
-        bubblesMap.set(messageId, { bubble, messageElement });
 
         bubble.addEventListener('click', (e) => {
             if (!e.target.closest('.dmt-regenerate-btn')) {
@@ -340,13 +347,19 @@ function renderThought(messageId, charName, thought, isLoading = false, isError 
         });
     }
 
+    // keyed by message AND character: in a group two characters can think on adjacent
+    // messages, and the old messageId-only key silently dropped one bubble from tracking
+    // (it then floated orphaned forever). Also refresh the element reference — ST rebuilds
+    // .mes nodes on edits, and a stale reference made syncBubbles kill a live bubble.
+    bubblesMap.set(`${messageId}::${charName}`, { bubble, messageElement });
+
     if (isLoading) {
         bubble.classList.remove('rpg-collapsed');
         bubble.innerHTML = `
             <div class="rpg-collapsed-icon">💭</div>
             <div class="rpg-expanded-content">
                 <div class="rpg-thought-header">
-                    <span><i class="fa-solid fa-brain"></i> ${charName}</span>
+                    <span><i class="fa-solid fa-brain"></i> ${escapeHtml(charName)}</span>
                 </div>
                 <div class="rpg-thought-text">
                     <span class="rpg-loading-dots">${t('loading')}</span>
@@ -357,13 +370,13 @@ function renderThought(messageId, charName, thought, isLoading = false, isError 
         return;
     }
 
-    let contentHtml = isError ? `<span style="color:#ff6b6b">${thought}</span>` : thought;
+    const contentHtml = isError ? `<span style="color:#ff6b6b">${escapeHtml(thought)}</span>` : escapeHtml(thought);
 
     bubble.innerHTML = `
         <div class="rpg-collapsed-icon">💭</div>
         <div class="rpg-expanded-content">
             <div class="rpg-thought-header">
-                <span><i class="fa-solid fa-brain"></i> ${charName}</span>
+                <span><i class="fa-solid fa-brain"></i> ${escapeHtml(charName)}</span>
                 <button class="dmt-regenerate-btn" title="${t('regen_title')}"><i class="fa-solid fa-rotate"></i></button>
             </div>
             <div class="rpg-thought-text">${contentHtml}</div>
@@ -384,18 +397,25 @@ async function processCharacterThought(messageId, charName, forceRegenerate = fa
     const msg = chat[messageId];
     if (!msg) return;
 
-    if (!forceRegenerate && msg.extra?.dmt_thoughts?.[charName]) {
+    // the cache is only valid for the SAME swipe: after swiping, the old thought described
+    // the variant the user just swiped AWAY from
+    const sameSwipe = (msg.extra?.dmt_swipe?.[charName] ?? 0) === (msg.swipe_id ?? 0);
+    if (!forceRegenerate && msg.extra?.dmt_thoughts?.[charName] && sameSwipe) {
         renderThought(messageId, charName, msg.extra.dmt_thoughts[charName], false, false, false);
         return;
     }
 
     renderThought(messageId, charName, '', true, false, false);
+    const myChat = context.chatId;   // message ids overlap between chats: a thought arriving
+                                     // after a switch used to be SAVED onto the new chat's
+                                     // message with the same number and rendered onto it
 
     try {
         const startIdx = Math.max(0, messageId - dmtSettings.contextMessages);
         const history = chat.slice(startIdx, messageId + 1);
 
         const thought = await generateThoughtAPI(history, charName);
+        if (getContext().chatId !== myChat) return;   // chat changed while the model was thinking
         saveThoughtToChat(messageId, charName, thought);
         renderThought(messageId, charName, thought, false, false, false);
         updateContextInjection();
@@ -522,13 +542,15 @@ function mountSettings() {
     $('#dmt-inject-count-row').toggle(dmtSettings.injectContext);
 
     $('#dmt-inject-count').val(dmtSettings.injectCount).on('change', function () {
-        dmtSettings.injectCount = parseInt($(this).val());
+        dmtSettings.injectCount = Math.max(1, parseInt($(this).val()) || 2);
+        $(this).val(dmtSettings.injectCount);
         saveSettings();
         updateContextInjection();
     });
 
     $('#dmt-context-messages').val(dmtSettings.contextMessages).on('change', function () {
-        dmtSettings.contextMessages = parseInt($(this).val());
+        dmtSettings.contextMessages = Math.max(2, parseInt($(this).val()) || 10);
+        $(this).val(dmtSettings.contextMessages);
         saveSettings();
     });
 }

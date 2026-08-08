@@ -127,6 +127,20 @@ function syncBubbles() {
         }
 
         const rect = messageElement.getBoundingClientRect();
+
+        // A message that has been folded away — a collapsed Doors arc, or anything else
+        // that sets display:none — has no box at all: every coordinate comes back zero.
+        // The bubble was then placed at top:0 left:50 and flew to the corner of the
+        // screen instead of disappearing with the message it belongs to.
+        const anchorHidden = (rect.width === 0 && rect.height === 0) || messageElement.offsetParent === null;
+        if (anchorHidden) {
+            bubble.style.opacity = '0';
+            bubble.style.pointerEvents = 'none';
+            bubble.style.visibility = 'hidden';   // must not sit invisibly over the chat
+            continue;
+        }
+        bubble.style.visibility = '';
+
         bubble.style.top = rect.top + 'px';
 
         if (rect.left < 250) {
@@ -246,14 +260,74 @@ function saveSettings() {
     saveSettingsDebounced();
 }
 
+/* ------------------------------------------------------------
+   ENDPOINT HANDLING — reaching the server only. Nothing about the thought
+   prompt, the second model's behaviour or the rendering changes here.
+   1. An empty key falls back to Tavern RPG Engine's. An address YOU typed always
+      wins: borrowing takes only what is missing, never the URL. A local backend
+      needs no key, so a placeholder is used rather than a borrowed one.
+   2. OpenAI-style backends live under /v1; without it LM Studio and KoboldCpp
+      reject the path outright.
+   There is no response_format anywhere in this module, so nothing needs gating
+   for local backends — that is why the usual third helper is absent.
+   ------------------------------------------------------------ */
+const KEY_SOURCES = ['tavern_rpg_engine'];
+function normalizeBase(url) {
+    let u = String(url || '').trim().replace(/\s+/g, '');
+    if (!u) return u;
+    u = u.replace(/\/+$/, '');
+    u = u.replace(/\/(chat\/completions|completions|images|images\/generations|embeddings)$/i, '');
+    if (!/\/v\d+($|\/)/i.test(u)) u += '/v1';
+    return u;
+}
+function isLocalEndpoint(url) {
+    const u = String(url || '').toLowerCase();
+    if (!u) return false;
+    return /(^|\/\/)(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]|host\.docker\.internal)([:/]|$)/.test(u)
+        || /:(5001|5000|8080|8000|1234|11434|5002)(\/|$)/.test(u)
+        || /192\.168\.|10\.\d+\.|172\.(1[6-9]|2\d|3[01])\./.test(u);
+}
+function borrowedRaw() {
+    for (const src of KEY_SOURCES) {
+        if (src === MODULE_NAME) continue;
+        try {
+            const x = extension_settings[src];
+            if (x && x.apiKey && x.model) return { url: x.baseUrl, key: x.apiKey, model: x.model, from: src };
+        } catch (e) { /* a neighbour with broken settings must not break us */ }
+    }
+    return { url: '', key: '', model: '', from: null };
+}
+function apiConf() {
+    const own = String(dmtSettings.baseUrl || '').trim();
+    const ownKey = String(dmtSettings.apiKey || '').trim();
+    const ownModel = String(dmtSettings.model || '').trim();
+    if (own) {
+        const local = isLocalEndpoint(own);
+        const b = (ownKey && ownModel) ? { key: '', model: '', from: null } : borrowedRaw();
+        return {
+            url: own,
+            key: ownKey || (local ? 'local' : b.key),
+            model: ownModel || (local ? '' : b.model),
+            from: ownKey ? null : (local ? null : b.from)
+        };
+    }
+    if (ownKey && ownModel) return { url: '', key: ownKey, model: ownModel, from: null };
+    const b = borrowedRaw();
+    return b.key ? b : { url: '', key: ownKey, model: ownModel, from: null };
+}
+function apiKey() { return apiConf().key || ''; }
+function apiUrl() { return normalizeBase(apiConf().url) || 'https://openrouter.ai/api/v1'; }
+function apiModel() { return apiConf().model || ''; }
+function borrowedFrom() { return apiConf().from; }
+
 async function generateThoughtAPI(chatMessages, charName) {
-    if (!dmtSettings.apiKey && dmtSettings.baseUrl.includes('openrouter')) {
+    if (!apiKey() && dmtSettings.baseUrl.includes('openrouter')) {
         throw new Error(t('err_no_key'));
     }
 
     const finalSystemPrompt = dmtSettings.systemPrompt.replace(/{{char}}/g, charName);
     let history = chatMessages.map(msg => `${msg.name}: ${msg.mes}`).join('\n\n');
-    let endpointUrl = (dmtSettings.baseUrl || 'https://openrouter.ai/api/v1').replace(/\/$/, '') + '/chat/completions';
+    let endpointUrl = apiUrl() + '/chat/completions';
 
     const maxRetries = 2;
 
@@ -262,13 +336,13 @@ async function generateThoughtAPI(chatMessages, charName) {
             const response = await fetch(endpointUrl, {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${(dmtSettings.apiKey || '').trim()}`,
+                    'Authorization': `Bearer ${apiKey().trim()}`,
                     'Content-Type': 'application/json',
                     'HTTP-Referer': window.location.origin,
                     'X-Title': 'SillyTavern DMT'
                 },
                 body: JSON.stringify({
-                    model: dmtSettings.model || 'google/gemma-4-31b-it',
+                    model: apiModel() || 'google/gemma-4-31b-it',
                     messages: [
                         { role: 'system', content: finalSystemPrompt },
                         { role: 'user', content: `Conversation History:\n${history}\n\nWrite the inner thought for ${charName} right now:` }

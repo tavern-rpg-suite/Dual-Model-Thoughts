@@ -2,7 +2,7 @@
 
 A SillyTavern extension that gives characters a visible **inner monologue**. A second (usually small, cheap) model reads the recent conversation and writes what the character is *actually thinking* — shown as a floating **thought bubble** next to their message. Optionally, those thoughts are injected back into the main prompt so the primary model plays the character with that hidden subtext in mind.
 
-**Version 1.2.2**
+**Version 1.2.3**
 
 ---
 

@@ -114,25 +114,56 @@ function initDmtLayer() {
     }
 }
 
-function syncBubbles() {
-    if (!dmtSettings.enabled || !dmtLayer) return;
+/* Called on every scroll tick, every resize and every DOM change inside #chat — which
+   during streaming is every token. Three things made that expensive:
 
+     · reading a rect and then writing a style, per bubble, in one loop: each write
+       invalidates the layout the next read needs, so the browser recomputes it from
+       scratch for every single bubble;
+     · no coalescing: a burst of twenty mutations ran the whole pass twenty times;
+     · an observer watching attributes across the whole subtree, so any hover or class
+       toggle anywhere in the chat triggered a full reposition.
+
+   Reads are now done first, writes second, and the whole thing runs at most once per
+   frame. */
+let syncQueued = false;
+function syncBubbles() {
+    if (syncQueued) return;
+    syncQueued = true;
+    requestAnimationFrame(() => { syncQueued = false; syncBubblesNow(); });
+}
+
+function syncBubblesNow() {
+    if (!dmtSettings.enabled || !dmtLayer) return;
+    if (!bubblesMap.size) return;
+
+    // pass one: measure everything, touch nothing
+    const plan = [];
     for (const [messageId, data] of bubblesMap.entries()) {
         const { bubble, messageElement } = data;
-
         if (!document.body.contains(messageElement)) {
-            bubble.remove();
-            bubblesMap.delete(messageId);
+            plan.push({ bubble, messageId, drop: true });
             continue;
         }
+        plan.push({ bubble, messageId, rect: messageElement.getBoundingClientRect(), hidden: messageElement.offsetParent === null });
+    }
 
-        const rect = messageElement.getBoundingClientRect();
+    // pass two: write, never measuring again
+    const vh = window.innerHeight;
+    for (const item of plan) {
+        const { bubble } = item;
+        if (item.drop) {
+            bubble.remove();
+            bubblesMap.delete(item.messageId);
+            continue;
+        }
+        const rect = item.rect;
 
         // A message that has been folded away — a collapsed Doors arc, or anything else
         // that sets display:none — has no box at all: every coordinate comes back zero.
         // The bubble was then placed at top:0 left:50 and flew to the corner of the
         // screen instead of disappearing with the message it belongs to.
-        const anchorHidden = (rect.width === 0 && rect.height === 0) || messageElement.offsetParent === null;
+        const anchorHidden = (rect.width === 0 && rect.height === 0) || item.hidden;
         if (anchorHidden) {
             bubble.style.opacity = '0';
             bubble.style.pointerEvents = 'none';
@@ -151,7 +182,7 @@ function syncBubbles() {
             bubble.style.left = rect.left + 'px';
         }
 
-        if (rect.bottom < 0 || rect.top > window.innerHeight) {
+        if (rect.bottom < 0 || rect.top > vh) {
             bubble.style.opacity = '0';
             bubble.style.pointerEvents = 'none';
         } else {
@@ -656,9 +687,14 @@ jQuery(() => {
         }
         window.addEventListener('resize', syncBubbles, { passive: true });
 
+        // Attributes are not watched any more. With subtree:true, every hover class and
+        // every inline style SillyTavern touches anywhere in the chat woke the whole
+        // repositioning pass — and it touches them constantly while a reply streams.
+        // Messages appearing and disappearing is what actually moves bubbles, and that
+        // is childList.
         const observer = new MutationObserver(syncBubbles);
         if (chatElement) {
-            observer.observe(chatElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
+            observer.observe(chatElement, { childList: true, subtree: true });
         }
 
         eventSource.on(event_types.CHAT_CHANGED, () => {

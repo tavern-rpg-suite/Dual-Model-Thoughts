@@ -1,5 +1,8 @@
 # Dual-Model Thoughts
 
+<img width="1672" height="941" alt="6d43bef1-75c9-419a-8f9b-1f4a810b7779" src="https://github.com/user-attachments/assets/b5b6417a-c378-459c-9dd7-2dd6bf189f02" />
+
+
 A SillyTavern extension that gives characters a visible **inner monologue**. A second (usually small, cheap) model reads the recent conversation and writes what the character is *actually thinking* — shown as a floating **thought bubble** next to their message. Optionally, those thoughts are injected back into the main prompt so the primary model plays the character with that hidden subtext in mind.
 
 **Version 1.2.3**
@@ -50,6 +53,11 @@ Supported: a thought is generated for the character whose message was just rende
 - Thoughts run on **every** character reply — pick a cheap/fast secondary model to keep it snappy and low-cost.
 - Past thoughts keep the language they were generated in; new ones follow the current UI language / prompt.
 - CSS is namespaced; only a fixed overlay layer (`#dmt-bubbles-layer`) is added to the page.
+
+---
+## ✨ Screenshots
+
+<img width="1916" height="870" alt="Preview-Dual-Model Thoughts" src="https://github.com/user-attachments/assets/9093bc9c-84bb-4e34-b056-87f919a8e7af" />
 
 
 ## Credits
